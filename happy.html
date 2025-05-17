@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YellowDot</title>
+  <style>
+    /* General styling */
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #00c6ff, #0072ff);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* Front page styles */
+    #frontPage {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      flex-grow: 1;
+      width: 100%;
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    #frontPage h1 {
+      font-size: 4rem;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+    }
+
+    #frontPage p {
+      font-size: 1.5rem;
+      max-width: 600px;
+      margin-bottom: 40px;
+      text-shadow: 1px 1px 5px rgba(0,0,0,0.3);
+    }
+
+    #startBtn {
+      padding: 20px 50px;
+      font-size: 2rem;
+      background: #ffd700;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(255, 215, 0, 0.6);
+      transition: transform 0.2s ease;
+    }
+    #startBtn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 8px 25px rgba(255, 215, 0, 0.9);
+    }
+
+    /* Game container hidden by default */
+    #gameContainer {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      background: skyblue;
+      width: 400px;
+      height: 650px;
+      box-shadow: 0 0 30px rgba(0,0,0,0.4);
+      border-radius: 15px;
+      padding: 10px 0 20px 0;
+      user-select: none;
+    }
+
+    canvas {
+      background: skyblue;
+      border-radius: 10px;
+      display: block;
+      margin: 0 auto;
+    }
+
+    .controls {
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    button.control-btn {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background-color: #0072ff;
+      color: white;
+      transition: background-color 0.2s ease;
+    }
+    button.control-btn:hover {
+      background-color: #005bb5;
+    }
+
+    .score {
+      text-align: center;
+      font-size: 24px;
+      margin-top: 10px;
+      font-weight: bold;
+      color: black;
+      text-shadow: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- FRONT PAGE -->
+  <div id="frontPage">
+    <h1>YellowDot</h1>
+    <p>Get ready to test your reflexes! Tap the screen or press SPACE to flap the dot and avoid the pipes. How far can you go?</p>
+    <button id="startBtn">Play Now</button>
+  </div>
+
+  <!-- GAME PAGE -->
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div class="controls">
+      <button class="control-btn" onclick="startGame()">Start</button>
+      <button class="control-btn" onclick="togglePause()">Pause</button>
+      <button class="control-btn" onclick="resetGame()">Retry</button>
+      <button class="control-btn" onclick="backToFront()">Back</button>
+    </div>
+    <div class="score">
+      Score: <span id="score">0</span> | High Score: <span id="highScore">0</span>
+    </div>
+  </div>
+
+  <script>
+    // FRONT PAGE -> GAME SWITCH
+    const frontPage = document.getElementById('frontPage');
+    const gameContainer = document.getElementById('gameContainer');
+    const startBtn = document.getElementById('startBtn');
+
+    startBtn.addEventListener('click', () => {
+      frontPage.style.display = 'none';
+      gameContainer.style.display = 'flex';
+      resetGame();
+    });
+
+    function backToFront() {
+      gameContainer.style.display = 'none';
+      frontPage.style.display = 'flex';
+      resetGame();
+    }
+
+    // GAME CODE STARTS HERE
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let birdY = 300;
+    let birdVelocity = 0;
+    const gravity = 0.5;
+    const jumpStrength = -8;
+    const birdRadius = 15;
+
+    let pipes = [];
+    const pipeWidth = 50;
+    const PIPE_GAP = 150;
+    const PIPE_INTERVAL = 1800;
+
+    let score = 0;
+    let highScore = 0;
+    let gameRunning = false;
+    let gamePaused = false;
+    let lastPipeTime = 0;
+
+    // Load high score from localStorage
+    highScore = localStorage.getItem('yellowDotHighScore') || 0;
+    document.getElementById('highScore').textContent = highScore;
+
+    function resetGame() {
+      birdY = 300;
+      birdVelocity = 0;
+      pipes = [];
+      score = 0;
+      document.getElementById("score").textContent = score;
+      gameRunning = false;
+      gamePaused = false;
+      lastPipeTime = 0;
+      draw();
+    }
+
+    function startGame() {
+      if (!gameRunning) {
+        resetGame();
+        gameRunning = true;
+        gameLoop();
+      }
+    }
+
+    function togglePause() {
+      gamePaused = !gamePaused;
+    }
+
+    function updateHighScore() {
+      if (score > highScore) {
+        highScore = score;
+        document.getElementById('highScore').textContent = highScore;
+        localStorage.setItem('yellowDotHighScore', highScore);
+      }
+    }
+
+    function gameLoop() {
+      if (!gameRunning) return;
+      if (!gamePaused) update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    function update() {
+      birdVelocity += gravity;
+      birdY += birdVelocity;
+
+      if (Date.now() - lastPipeTime > PIPE_INTERVAL) {
+        createPipe();
+        lastPipeTime = Date.now();
+      }
+
+      // Move pipes
+      for (let i = 0; i < pipes.length; i++) {
+        pipes[i].x -= 2;
+
+        // Check score
+        if (!pipes[i].passed && pipes[i].x + pipeWidth < 200) {
+          score++;
+          pipes[i].passed = true;
+          document.getElementById("score").textContent = score;
+          updateHighScore();
+        }
+      }
+
+      // Remove off-screen pipes
+      pipes = pipes.filter(p => p.x + pipeWidth > 0);
+
+      // Check collision
+      for (let i = 0; i < pipes.length; i++) {
+        const p = pipes[i];
+        if (
+          200 + birdRadius > p.x &&
+          200 - birdRadius < p.x + pipeWidth &&
+          (birdY - birdRadius < p.top || birdY + birdRadius > p.bottom)
+        ) {
+          gameRunning = false;
+        }
+      }
+
+      // Ground/ceiling collision
+      if (birdY + birdRadius > canvas.height || birdY - birdRadius < 0) {
+        gameRunning = false;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw bird with rotation based on velocity
+      ctx.save();
+      ctx.translate(200, birdY);
+      const maxTilt = Math.PI / 6; // 30 degrees max tilt
+      const tilt = Math.min(Math.max(birdVelocity / 10, -maxTilt), maxTilt);
+      ctx.rotate(tilt);
+      ctx.fillStyle = "yellow";
+      ctx.beginPath();
+      ctx.arc(0, 0, birdRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Draw pipes
+      ctx.fillStyle = "green";
+      for (let i = 0; i < pipes.length; i++) {
+        const p = pipes[i];
+        ctx.fillRect(p.x, 0, pipeWidth, p.top);
+        ctx.fillRect(p.x, p.bottom, pipeWidth, canvas.height - p.bottom);
+      }
+
+      // Draw message if game over
+      if (!gameRunning) {
+        ctx.fillStyle = "black";
+        ctx.font = "36px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 20);
+        ctx.font = "24px sans-serif";
+        ctx.fillText("Click Retry or Press Start", canvas.width / 2, canvas.height / 2 + 20);
+      }
+    }
+
+    function createPipe() {
+      const minPipeHeight = 80;
+      const maxPipeHeight = canvas.height - PIPE_GAP - minPipeHeight;
+      const topHeight = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1)) + minPipeHeight;
+      const bottomY = topHeight + PIPE_GAP;
+
+      pipes.push({ x: canvas.width, top: topHeight, bottom: bottomY, passed: false });
+    }
+
+    function jump() {
+      if (!gameRunning) return;
+      birdVelocity = jumpStrength;
+    }
+
+    // Controls for keyboard and touch/mouse
+    document.addEventListener("keydown", e => {
+      if (e.code === "Space") jump();
+    });
+    canvas.addEventListener("mousedown", jump);
+    canvas.addEventListener("touchstart", e => {
+      e.preventDefault();
+      jump();
+    }, { passive: false });
+
+    // Start front page only, so game is hidden on load
+    resetGame();
+  </script>
+</body>
+</html>
